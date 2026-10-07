@@ -39,7 +39,7 @@ export function installMayerJustinCalendar() {
   mhRepository.saveEvent = async function(value) {
     const payload = {
       client_id: value.client_id || null,
-      assigned_agent_id: this.user?.id || value.assigned_agent_id || null,
+      assigned_agent_id: value.assigned_agent_id || this.user?.id || null,
       title: String(value.title || '').trim() || `Appointment: ${value.person_name || 'Client'}`,
       event_type: value.event_type || 'appointment',
       event_date: value.event_date,
