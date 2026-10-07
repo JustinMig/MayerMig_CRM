@@ -166,8 +166,11 @@ function pharmacyMarkup(pharmacy = {}) {
       <div><h3>Pharmacy Information</h3><p>Keep the client's preferred pharmacy and medication-related files together.</p></div>
     </div>
     <div class="pharmacy-fields form-grid">
-      <label class="field"><span>Pharmacy Name</span><input name="pharmacy_name" value="${esc(pharmacy.pharmacy_name || '')}" autocomplete="off"></label>
-      <label class="field"><span>Pharmacy Location</span><input name="pharmacy_location" value="${esc(pharmacy.pharmacy_location || '')}" placeholder="Address, city, or location" autocomplete="off"></label>
+      <label class="field"><span>Primary Pharmacy Name</span><input name="pharmacy_name" value="${esc(pharmacy.pharmacy_name || '')}" autocomplete="off"></label>
+      <label class="field"><span>Primary Pharmacy Location</span><input name="pharmacy_location" value="${esc(pharmacy.pharmacy_location || '')}" placeholder="Address, city, or location" autocomplete="off"></label>
+      <label class="field"><span>Second Pharmacy Name</span><input name="pharmacy_name_2" value="${esc(pharmacy.pharmacy_name_2 || '')}" autocomplete="off"></label>
+      <label class="field"><span>Second Pharmacy Location</span><input name="pharmacy_location_2" value="${esc(pharmacy.pharmacy_location_2 || '')}" placeholder="Address, city, or location" autocomplete="off"></label>
+      <label class="field span-all"><span>Medication / Pharmacy Notes</span><textarea name="medication_notes" rows="4" placeholder="Add notes about medications, pharmacies, refill details, or anything else important.">${esc(pharmacy.medication_notes || '')}</textarea></label>
     </div>
     <div class="pharmacy-file-head">
       <div><strong>Medication / Pharmacy Files</strong><span>Upload medication lists, pharmacy printouts, prescription photos, or other related files.</span></div>
@@ -308,10 +311,13 @@ function bindPharmacyPanel(form, dialog, clientId, pharmacy = {}) {
   }
 }
 
-async function savePharmacy(clientId, pharmacyName, pharmacyLocation) {
+async function savePharmacy(clientId, pharmacyName, pharmacyLocation, pharmacyName2, pharmacyLocation2, medicationNotes) {
   const name = String(pharmacyName || '').trim();
   const location = String(pharmacyLocation || '').trim();
-  if (!name && !location) {
+  const name2 = String(pharmacyName2 || '').trim();
+  const location2 = String(pharmacyLocation2 || '').trim();
+  const notes = String(medicationNotes || '').trim();
+  if (!name && !location && !name2 && !location2 && !notes) {
     const { error } = await supabase.from('client_pharmacies').delete().eq('client_id', clientId);
     if (error) throw error;
     pharmacyCache.set(clientId, null);
@@ -321,6 +327,9 @@ async function savePharmacy(clientId, pharmacyName, pharmacyLocation) {
     client_id: clientId,
     pharmacy_name: name || null,
     pharmacy_location: location || null,
+    pharmacy_name_2: name2 || null,
+    pharmacy_location_2: location2 || null,
+    medication_notes: notes || null,
     updated_at: new Date().toISOString()
   };
   const { data, error } = await supabase.from('client_pharmacies').upsert(payload, { onConflict: 'client_id' }).select('*').single();
@@ -359,12 +368,18 @@ const baseSaveClient = mhRepository.saveClient.bind(mhRepository);
 mhRepository.saveClient = async function saveClientWithPharmacy(record, ...args) {
   const pharmacyName = record.pharmacy_name ?? '';
   const pharmacyLocation = record.pharmacy_location ?? '';
+  const pharmacyName2 = record.pharmacy_name_2 ?? '';
+  const pharmacyLocation2 = record.pharmacy_location_2 ?? '';
+  const medicationNotes = record.medication_notes ?? '';
   const cleaned = { ...record };
   delete cleaned.pharmacy_name;
   delete cleaned.pharmacy_location;
+  delete cleaned.pharmacy_name_2;
+  delete cleaned.pharmacy_location_2;
+  delete cleaned.medication_notes;
   const saved = await baseSaveClient(cleaned, ...args);
   if (!saved?.id) return saved;
-  await savePharmacy(saved.id, pharmacyName, pharmacyLocation);
+  await savePharmacy(saved.id, pharmacyName, pharmacyLocation, pharmacyName2, pharmacyLocation2, medicationNotes);
   const dialog = [...document.querySelectorAll('dialog.client-dialog')].reverse().find(item => item.isConnected && dialogStates.has(item));
   if (dialog) await flushQueued(dialog, saved.id);
   return saved;
