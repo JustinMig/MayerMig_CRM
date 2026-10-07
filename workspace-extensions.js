@@ -4,7 +4,7 @@ import './medicare-gov-credentials.js?v=new-client-isolation-1';
 import './banking-information.js?v=new-client-isolation-1';
 import './life-multiple-policies.js?v=new-client-isolation-1';
 import './life-other-carrier.js';
-import './client-pharmacy.js?v=new-client-isolation-1';
+import './client-pharmacy.js?v=pharmacy-notes-1';
 import './client-health-tabs.js?v=client-audit-1';
 import './medication-autocomplete.js?v=rxterms-1';
 import './hospital-indemnity-documents.js';
