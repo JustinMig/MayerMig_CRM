@@ -37,3 +37,117 @@
 @import "./client-texting.css";
 @import "./communications-ui.css";
 @import "./mobile-bottom-toolbar.css";
+
+
+/* Appointment day cards */
+.appointment-card {
+  margin: 10px 0;
+  border: 1px solid rgba(20, 49, 67, .14);
+  border-radius: 12px;
+  background: rgba(255,255,255,.94);
+  overflow: hidden;
+}
+.appointment-card > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+}
+.appointment-card > summary::-webkit-details-marker { display: none; }
+.appointment-card > summary::after {
+  content: '▾';
+  margin-left: auto;
+  opacity: .55;
+  transition: transform .18s ease;
+}
+.appointment-card[open] > summary::after { transform: rotate(180deg); }
+.appointment-summary-name {
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: .01em;
+}
+.appointment-card-body {
+  border-top: 1px solid rgba(20,49,67,.10);
+  padding: 16px;
+  background: rgba(248,250,251,.95);
+}
+.appointment-overview {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.appointment-overview-main h3 {
+  margin: 3px 0 0;
+  font-size: 1.05rem;
+}
+.appointment-kicker,
+.appointment-status,
+.appointment-detail-grid small,
+.appointment-notes-box small,
+.appointment-followup-note small {
+  font-size: .74rem;
+  text-transform: uppercase;
+  letter-spacing: .055em;
+  opacity: .68;
+}
+.appointment-status {
+  border: 1px solid rgba(20,49,67,.14);
+  border-radius: 999px;
+  padding: 5px 9px;
+  white-space: nowrap;
+  background: #fff;
+}
+.appointment-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0,1fr));
+  gap: 10px;
+}
+.appointment-detail-grid section,
+.appointment-notes-box,
+.appointment-followup-note {
+  border: 1px solid rgba(20,49,67,.10);
+  border-radius: 9px;
+  background: #fff;
+  padding: 10px 12px;
+}
+.appointment-detail-grid section {
+  display: grid;
+  gap: 4px;
+}
+.appointment-detail-grid strong {
+  font-size: .93rem;
+  overflow-wrap: anywhere;
+}
+.appointment-notes-box,
+.appointment-followup-note {
+  margin-top: 10px;
+}
+.appointment-notes-box p,
+.appointment-followup-note p {
+  margin: 5px 0 0;
+  line-height: 1.45;
+}
+.appointment-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+.appointment-action-status {
+  min-height: 1.2em;
+  margin-top: 8px;
+  font-size: .86rem;
+}
+.appointment-action-status.error { color: #a52a2a; }
+@media (max-width: 760px) {
+  .appointment-detail-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 520px) {
+  .appointment-detail-grid { grid-template-columns: 1fr; }
+  .appointment-overview { display: grid; }
+  .appointment-actions .btn { flex: 1 1 100%; }
+}
