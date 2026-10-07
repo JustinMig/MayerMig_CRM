@@ -1,6 +1,6 @@
 import { makeClientSearch } from './client-age-search.js?v=shared-notes-search-1';
 import { createCampaignRepository } from './campaigns-repository.js';
-import { createWorkspace } from './workspace.js?v=appointment-details-1';
+import { createWorkspace } from './workspace.js?v=appointment-actions-1';
 import { mhRepository, supabase } from './supabase-repository.js';
 import './username-user-access.js?v=1';
 import { installAdminUsers } from './admin-users.js?v=optimization-2';
@@ -8,7 +8,7 @@ import { installPullToRefresh } from './pull-to-refresh.js';
 import { installDashboardCleanup } from './dashboard-cleanup.js';
 import { installAppointmentSingleAgent } from './appointment-ui.js?v=optimization-2';
 import { installCarrierVault } from './carriers-ui.js';
-import { installMayerJustinCalendar } from './calendar-sync.js?v=justin-calendar-1';
+import { installMayerJustinCalendar } from './calendar-sync.js?v=appointment-actions-1';
 import { installClientAgeFilter } from './client-age-filter.js';
 import { installClientDelete } from './client-delete.js';
 import { installSimpleDashboardNote } from './dashboard-note-simple.js?v=shared-notes-search-1';
