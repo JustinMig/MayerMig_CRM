@@ -219,8 +219,47 @@ export function createWorkspace(root, repository = disconnectedRepository) {
   function openDay(mode, key) {
     const title = mode === 'today' ? 'Today’s Appointments' : mode === 'reschedule' ? 'Reschedule' : longDate(key);
     const entries = state.events.filter(event => mode === 'reschedule' ? event.status === 'needs_reschedule' : event.event_date === key && event.status !== 'needs_reschedule' && (mode !== 'today' || event.status !== 'completed'));
-    const d = dialogs.open({ title, hint: mode === 'today' ? longDate(key) : 'Calendar appointments and activities', icon: icon('appointments', true), kind: 'day-dialog', body: `${info}<div class="day-add"><button type="button" class="btn primary" data-day-add>+ ADD APPOINTMENT / ACTIVITY</button></div>${entries.length ? entries.map(e => `<details class="event-card"><summary><strong>${esc(e.title)}</strong><span>${esc(timeLabel(e.start_time))}</span></summary><div><p>${esc(e.notes || 'No notes')}</p><span class="subtle">${esc(e.status || 'scheduled')}</span></div></details>`).join('') : empty(connected ? 'Nothing scheduled' : 'No appointments loaded', connected ? 'Use Add Appointment / Activity to schedule this day.' : 'Scheduling and reschedule queues require the standalone backend.')}` });
+    const appointmentName = (event, client = null) => {
+      const clientName = [client?.first_name, client?.last_name].filter(Boolean).join(' ').trim();
+      if (clientName) return clientName;
+      return String(event?.title || 'Appointment').replace(/^Appointment:\\s*/i, '').trim() || 'Appointment';
+    };
+    const detailRow = (label, value) => value ? `<div class="event-detail-row"><strong>${esc(label)}</strong><span>${esc(value)}</span></div>` : '';
+    const cardMarkup = (event, client = null) => {
+      const agent = agents.find(item => item.id === event.assigned_agent_id);
+      const clientName = appointmentName(event, client);
+      const contact = [
+        detailRow('Client', clientName),
+        detailRow('Phone', client?.phone || ''),
+        detailRow('Email', client?.email || ''),
+        detailRow('Type', event.event_type || ''),
+        detailRow('Date', event.event_date ? longDate(event.event_date) : ''),
+        detailRow('Time', timeLabel(event.start_time)),
+        detailRow('Agent', agent?.full_name || ''),
+        detailRow('Title', event.title || ''),
+        detailRow('Notes', event.notes || 'No notes'),
+        detailRow('Status', event.status || 'scheduled')
+      ].join('');
+      return `<details class="event-card" data-event-id="${esc(event.id || '')}"><summary><strong>${esc(clientName)}</strong></summary><div class="event-detail-grid">${contact}</div></details>`;
+    };
+    const initial = entries.length
+      ? entries.map(event => cardMarkup(event)).join('')
+      : empty(connected ? 'Nothing scheduled' : 'No appointments loaded', connected ? 'Use Add Appointment / Activity to schedule this day.' : 'Scheduling and reschedule queues require the standalone backend.');
+    const d = dialogs.open({ title, hint: mode === 'today' ? longDate(key) : 'Calendar appointments and activities', icon: icon('appointments', true), kind: 'day-dialog', body: `${info}<div class="day-add"><button type="button" class="btn primary" data-day-add>+ ADD APPOINTMENT / ACTIVITY</button></div><div data-day-events>${initial}</div>` });
     d.node.querySelector('[data-day-add]').onclick = () => openAppointment(key);
+
+    const host = d.node.querySelector('[data-day-events]');
+    if (entries.length && host) {
+      const clientIds = [...new Set(entries.map(event => event.client_id).filter(Boolean))];
+      Promise.all(clientIds.map(async clientId => {
+        try { return [clientId, await repository.getClient(clientId)]; }
+        catch { return [clientId, null]; }
+      })).then(results => {
+        if (!d.node.isConnected) return;
+        const clients = new Map(results);
+        host.innerHTML = entries.map(event => cardMarkup(event, clients.get(event.client_id) || null)).join('');
+      });
+    }
   }
   function openAppointment(key = todayKey()) {
     const timeOptions = [['', 'Select appointment time'], ...Array.from({ length: 48 }, (_, i) => {
