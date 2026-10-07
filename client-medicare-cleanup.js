@@ -5,6 +5,18 @@ const PLAN_TYPES = ['Supplement', 'Medicare Advantage'];
 const planTypeByClient = new Map();
 const baseSaveClient = mhRepository.saveClient.bind(mhRepository);
 
+async function getLatestHealthPlan(clientId) {
+  const { data, error } = await supabase
+    .from('health_plans')
+    .select('*')
+    .eq('client_id', clientId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data || null;
+}
+
 mhRepository.saveClient = async function (record, ...args) {
   const originalId = record?.id || '';
   const planKey = originalId || '__new__';
