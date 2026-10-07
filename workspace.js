@@ -216,70 +216,222 @@ export function createWorkspace(root, repository = disconnectedRepository) {
       if (token === state.calendarToken && host.isConnected) host.querySelector('.calendar-status').textContent = e.message || 'Calendar could not load. Try another month or Today to retry.';
     }
   }
+
   function openDay(mode, key) {
-    const title = mode === 'today' ? 'Today’s Appointments' : mode === 'reschedule' ? 'Reschedule' : longDate(key);
-    const entries = state.events.filter(event => mode === 'reschedule' ? event.status === 'needs_reschedule' : event.event_date === key && event.status !== 'needs_reschedule' && (mode !== 'today' || event.status !== 'completed'));
+    const title = mode === 'today' ? 'Today’s Appointments' : mode === 'reschedule' ? 'Follow Up / Reassign' : longDate(key);
+    const matchesMode = event => mode === 'reschedule'
+      ? event.status === 'needs_reschedule'
+      : event.event_date === key && event.status !== 'needs_reschedule' && (mode !== 'today' || event.status !== 'completed');
+
+    const d = dialogs.open({
+      title,
+      hint: mode === 'today' ? longDate(key) : 'Calendar appointments and activities',
+      icon: icon('appointments', true),
+      kind: 'day-dialog',
+      body: `${info}<div class="day-add"><button type="button" class="btn primary" data-day-add>+ ADD APPOINTMENT / ACTIVITY</button></div><div data-day-events></div>`
+    });
+    d.node.querySelector('[data-day-add]').onclick = () => openAppointment(key, null, saved => {
+      if (saved?.id) {
+        const index = state.events.findIndex(item => item.id === saved.id);
+        if (index >= 0) state.events[index] = saved;
+        else state.events.push(saved);
+        renderCards();
+      }
+    });
+
+    const host = d.node.querySelector('[data-day-events]');
+    let clients = new Map();
+
     const appointmentName = (event, client = null) => {
       const clientName = [client?.first_name, client?.last_name].filter(Boolean).join(' ').trim();
       if (clientName) return clientName;
       return String(event?.title || 'Appointment').replace(/^Appointment:\\s*/i, '').trim() || 'Appointment';
     };
-    const detailRow = (label, value) => value ? `<div class="event-detail-row"><strong>${esc(label)}</strong><span>${esc(value)}</span></div>` : '';
-    const cardMarkup = (event, client = null) => {
-      const agent = agents.find(item => item.id === event.assigned_agent_id);
-      const clientName = appointmentName(event, client);
-      const contact = [
-        detailRow('Client', clientName),
-        detailRow('Phone', client?.phone || ''),
-        detailRow('Email', client?.email || ''),
-        detailRow('Type', event.event_type || ''),
-        detailRow('Date', event.event_date ? longDate(event.event_date) : ''),
-        detailRow('Time', timeLabel(event.start_time)),
-        detailRow('Agent', agent?.full_name || ''),
-        detailRow('Title', event.title || ''),
-        detailRow('Notes', event.notes || 'No notes'),
-        detailRow('Status', event.status || 'scheduled')
-      ].join('');
-      return `<details class="event-card" data-event-id="${esc(event.id || '')}"><summary><strong>${esc(clientName)}</strong></summary><div class="event-detail-grid">${contact}</div></details>`;
-    };
-    const initial = entries.length
-      ? entries.map(event => cardMarkup(event)).join('')
-      : empty(connected ? 'Nothing scheduled' : 'No appointments loaded', connected ? 'Use Add Appointment / Activity to schedule this day.' : 'Scheduling and reschedule queues require the standalone backend.');
-    const d = dialogs.open({ title, hint: mode === 'today' ? longDate(key) : 'Calendar appointments and activities', icon: icon('appointments', true), kind: 'day-dialog', body: `${info}<div class="day-add"><button type="button" class="btn primary" data-day-add>+ ADD APPOINTMENT / ACTIVITY</button></div><div data-day-events>${initial}</div>` });
-    d.node.querySelector('[data-day-add]').onclick = () => openAppointment(key);
 
-    const host = d.node.querySelector('[data-day-events]');
-    if (entries.length && host) {
-      const clientIds = [...new Set(entries.map(event => event.client_id).filter(Boolean))];
-      Promise.all(clientIds.map(async clientId => {
-        try { return [clientId, await repository.getClient(clientId)]; }
-        catch { return [clientId, null]; }
-      })).then(results => {
-        if (!d.node.isConnected) return;
-        const clients = new Map(results);
-        host.innerHTML = entries.map(event => cardMarkup(event, clients.get(event.client_id) || null)).join('');
-      });
-    }
+    const safeDate = value => {
+      try { return value ? longDate(value) : ''; } catch { return value || ''; }
+    };
+
+    const cardMarkup = event => {
+      const client = clients.get(event.client_id) || null;
+      const clientName = appointmentName(event, client);
+      const agent = agents.find(item => item.id === event.assigned_agent_id);
+      const statusLabel = String(event.status || 'scheduled').replaceAll('_', ' ');
+      return `
+        <details class="event-card appointment-card" data-event-id="${esc(event.id || '')}">
+          <summary>
+            <span class="appointment-summary-name">${esc(clientName)}</span>
+          </summary>
+          <div class="appointment-card-body">
+            <div class="appointment-overview">
+              <div class="appointment-overview-main">
+                <span class="appointment-kicker">${esc(event.event_type || 'Appointment')}</span>
+                <h3>${esc(event.title || 'Appointment')}</h3>
+              </div>
+              <span class="appointment-status">${esc(statusLabel)}</span>
+            </div>
+            <div class="appointment-detail-grid">
+              <section><small>Date</small><strong>${esc(safeDate(event.event_date))}</strong></section>
+              <section><small>Time</small><strong>${esc(timeLabel(event.start_time) || '—')}</strong></section>
+              <section><small>Assigned Agent</small><strong>${esc(agent?.full_name || '—')}</strong></section>
+              <section><small>Client</small><strong>${esc(clientName)}</strong></section>
+              <section><small>Phone</small><strong>${esc(client?.phone || '—')}</strong></section>
+              <section><small>Email</small><strong>${esc(client?.email || '—')}</strong></section>
+            </div>
+            <section class="appointment-notes-box">
+              <small>Notes</small>
+              <p class="preserve-lines">${esc(event.notes || 'No notes')}</p>
+            </section>
+            ${event.reschedule_note ? `<section class="appointment-followup-note"><small>Follow-up / Reassign Note</small><p class="preserve-lines">${esc(event.reschedule_note)}</p></section>` : ''}
+            <div class="appointment-actions">
+              <button type="button" class="btn secondary" data-event-edit>Edit Appointment</button>
+              ${event.client_id ? '<button type="button" class="btn secondary" data-event-client>Open Client</button>' : ''}
+              ${event.status !== 'completed' ? '<button type="button" class="btn secondary" data-event-complete>Mark Completed</button>' : ''}
+              <button type="button" class="btn secondary" data-event-followup>Follow Up / Reassign</button>
+              <button type="button" class="btn danger" data-event-delete>Delete Appointment</button>
+            </div>
+            <div class="appointment-action-status" data-event-status role="status" aria-live="polite"></div>
+          </div>
+        </details>`;
+    };
+
+    const renderCards = () => {
+      if (!host?.isConnected) return;
+      const entries = state.events.filter(matchesMode);
+      host.innerHTML = entries.length
+        ? entries.map(cardMarkup).join('')
+        : empty(connected ? 'Nothing scheduled' : 'No appointments loaded', connected ? 'Use Add Appointment / Activity to schedule this day.' : 'Scheduling and reschedule queues require the standalone backend.');
+    };
+
+    const loadClients = async () => {
+      const entries = state.events.filter(matchesMode);
+      const ids = [...new Set(entries.map(event => event.client_id).filter(Boolean))];
+      const rows = await Promise.all(ids.map(async id => {
+        try { return [id, await repository.getClient(id)]; }
+        catch { return [id, null]; }
+      }));
+      if (!d.node.isConnected) return;
+      clients = new Map(rows);
+      renderCards();
+    };
+
+    renderCards();
+    void loadClients();
+
+    host.addEventListener('click', async event => {
+      const card = event.target.closest?.('[data-event-id]');
+      if (!card) return;
+      const appointment = state.events.find(item => item.id === card.dataset.eventId);
+      if (!appointment) return;
+      const status = card.querySelector('[data-event-status]');
+      const setStatus = (message = '', error = false) => {
+        if (!status) return;
+        status.textContent = message;
+        status.classList.toggle('error', error);
+      };
+
+      if (event.target.closest('[data-event-edit]')) {
+        openAppointment(appointment.event_date || key, appointment, saved => {
+          if (!saved?.id) return;
+          const index = state.events.findIndex(item => item.id === saved.id);
+          if (index >= 0) state.events[index] = saved;
+          else state.events.push(saved);
+          renderCards();
+          void loadClients();
+        });
+        return;
+      }
+
+      if (event.target.closest('[data-event-client]')) {
+        if (appointment.client_id) openClient(appointment.client_id);
+        return;
+      }
+
+      if (event.target.closest('[data-event-complete]')) {
+        try {
+          setStatus('Marking appointment completed…');
+          const saved = await repository.completeEvent(appointment.id);
+          const index = state.events.findIndex(item => item.id === appointment.id);
+          if (index >= 0) state.events[index] = saved || { ...appointment, status: 'completed' };
+          drawCalendar();
+          renderCards();
+        } catch (error) {
+          setStatus(error?.message || 'Unable to mark this appointment completed.', true);
+        }
+        return;
+      }
+
+      if (event.target.closest('[data-event-followup]')) {
+        const note = prompt('Enter the follow-up or reassignment note:');
+        if (note === null) return;
+        try {
+          setStatus('Sending appointment to Follow Up / Reassign…');
+          const saved = await repository.rescheduleEvent(appointment.id, note.trim());
+          const index = state.events.findIndex(item => item.id === appointment.id);
+          if (index >= 0) state.events[index] = saved || { ...appointment, status: 'needs_reschedule', reschedule_note: note.trim() };
+          drawCalendar();
+          renderCards();
+        } catch (error) {
+          setStatus(error?.message || 'Unable to move this appointment to Follow Up / Reassign.', true);
+        }
+        return;
+      }
+
+      if (event.target.closest('[data-event-delete]')) {
+        if (!confirm(`Delete the appointment for ${appointmentName(appointment, clients.get(appointment.client_id) || null)}? This cannot be undone.`)) return;
+        try {
+          setStatus('Deleting appointment…');
+          await repository.deleteEvent(appointment.id);
+          state.events = state.events.filter(item => item.id !== appointment.id);
+          drawCalendar();
+          renderCards();
+        } catch (error) {
+          setStatus(error?.message || 'Unable to delete this appointment.', true);
+        }
+      }
+    });
   }
-  function openAppointment(key = todayKey()) {
+
+
+  function openAppointment(key = todayKey(), existing = null, onSaved = null) {
+    const editing = !!existing?.id;
     const timeOptions = [['', 'Select appointment time'], ...Array.from({ length: 48 }, (_, i) => {
       const t = `${String(Math.floor(i / 2)).padStart(2, '0')}:${i % 2 ? '30' : '00'}`; return [t, timeLabel(t)];
     })];
-    const body = `${info}<div class="intro"><strong>Set Appointment</strong><p>Schedule an existing client or a new/non-client on the calendar.</p></div><form class="appointment-form" autocomplete="off" novalidate><div class="form-grid">${select('assigned_agent_id', 'Agent', [['', connected ? 'Select agent' : 'No agents connected'], ...agents.map(a => [a.id, a.full_name])], !connected)}${select('event_type', 'Type', ['Appointment', 'Activity'])}</div><div class="mode-picker" role="group" aria-label="Appointment person type"><button type="button" class="active" data-mode="existing" aria-pressed="true">EXISTING CLIENT</button><button type="button" data-mode="new" aria-pressed="false">NEW / NON-CLIENT</button></div><input type="hidden" name="person_type" value="existing"><input type="hidden" name="client_id" value=""><div data-existing><label class="field"><span>Client</span><input data-person-search placeholder="Type client name or phone" autocomplete="off"></label><div data-person-results class="lookup-results" aria-live="polite"></div><p data-selected-person class="subtle">No client selected</p></div><div data-new-person hidden><div class="form-grid">${input('person_name', 'New / Non-client Name')}${input('person_phone', 'Phone Number', { type: 'tel' })}</div></div><div class="form-grid">${input('title', 'Appointment / Activity Title', { span: true })}${dateInput('event_date', 'Appointment Date', true)}${select('start_time', 'Appointment Time', timeOptions)}</div>${textArea('notes', 'Notes (optional)', 'Purpose of appointment or anything to remember')}<p class="subtle">${connected ? 'The server must check availability before confirming a save.' : 'Availability cannot be checked until scheduling is connected.'}</p></form>`;
-    const d = dialogs.open({ title: 'Appointments', hint: 'Set an appointment', icon: icon('appointments', true), kind: 'appointment-dialog', body, footer: saveFooter('Add to Calendar'), onSave: async form => {
+    const body = `${info}<div class="intro"><strong>${editing ? 'Edit Appointment' : 'Set Appointment'}</strong><p>${editing ? 'Update the saved appointment information.' : 'Schedule an existing client or a new/non-client on the calendar.'}</p></div><form class="appointment-form" autocomplete="off" novalidate><div class="form-grid">${select('assigned_agent_id', 'Agent', [['', connected ? 'Select agent' : 'No agents connected'], ...agents.map(a => [a.id, a.full_name])], !connected)}${select('event_type', 'Type', ['Appointment', 'Activity'])}</div><div class="mode-picker" role="group" aria-label="Appointment person type"><button type="button" class="active" data-mode="existing" aria-pressed="true">EXISTING CLIENT</button><button type="button" data-mode="new" aria-pressed="false">NEW / NON-CLIENT</button></div><input type="hidden" name="person_type" value="existing"><input type="hidden" name="client_id" value=""><div data-existing><label class="field"><span>Client</span><input data-person-search placeholder="Type client name or phone" autocomplete="off"></label><div data-person-results class="lookup-results" aria-live="polite"></div><p data-selected-person class="subtle">No client selected</p></div><div data-new-person hidden><div class="form-grid">${input('person_name', 'New / Non-client Name')}${input('person_phone', 'Phone Number', { type: 'tel' })}</div></div><div class="form-grid">${input('title', 'Appointment / Activity Title', { span: true })}${dateInput('event_date', 'Appointment Date', true)}${select('start_time', 'Appointment Time', timeOptions)}</div>${textArea('notes', 'Notes (optional)', 'Purpose of appointment or anything to remember')}<p class="subtle">${connected ? 'The server must check availability before confirming a save.' : 'Availability cannot be checked until scheduling is connected.'}</p></form>`;
+    const d = dialogs.open({ title: editing ? 'Edit Appointment' : 'Appointments', hint: editing ? 'Update appointment details' : 'Set an appointment', icon: icon('appointments', true), kind: 'appointment-dialog', body, footer: saveFooter(editing ? 'Save Changes' : 'Add to Calendar'), onSave: async form => {
       const value = serializable(form);
       if (value.person_type === 'existing' && !value.client_id) throw new Error('Select an existing client, or switch to New / Non-client.');
       if (value.person_type === 'new' && !value.person_name.trim()) throw new Error('Enter a name for this appointment.');
       if (!value.start_time) throw new Error('Select an appointment time.');
+      if (editing) value.event_id = existing.id;
       const saved = await repository.saveEvent(value);
       if (!saved?.id) throw new Error('The calendar did not confirm this appointment. Nothing is marked saved.');
-      // Saving the same draft again must update, not create a duplicate.
-      form.elements.namedItem('event_id')?.remove();
-      const hidden = document.createElement('input'); hidden.type = 'hidden'; hidden.name = 'event_id'; hidden.value = saved.id; form.append(hidden);
+      let idField = form.elements.namedItem('event_id');
+      if (!idField) { idField = document.createElement('input'); idField.type = 'hidden'; idField.name = 'event_id'; form.append(idField); }
+      idField.value = saved.id;
+      if (typeof onSaved === 'function') onSaved(saved);
       drawCalendar();
     } });
     const form = d.node.querySelector('form');
-    form.elements.event_date.value = dateText(key);
+    form.elements.event_date.value = dateText(existing?.event_date || key);
+    if (existing) {
+      form.elements.assigned_agent_id.value = existing.assigned_agent_id || '';
+      form.elements.event_type.value = existing.event_type || 'Appointment';
+      form.elements.title.value = existing.title || '';
+      form.elements.start_time.value = String(existing.start_time || '').slice(0, 5);
+      form.elements.notes.value = existing.notes || '';
+      if (existing.client_id) {
+        form.elements.client_id.value = existing.client_id;
+        repository.getClient(existing.client_id).then(client => {
+          if (!d.node.isConnected || !client) return;
+          const name = [client.first_name, client.last_name].filter(Boolean).join(' ').trim();
+          form.querySelector('[data-person-search]').value = name;
+          form.querySelector('[data-selected-person]').textContent = `Selected: ${name}${client.phone ? ` • ${client.phone}` : ''}`;
+          d.baseline?.();
+        }).catch(() => {});
+      }
+    }
     let token = 0, timer;
     form.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => {
       form.elements.person_type.value = b.dataset.mode;
@@ -312,6 +464,7 @@ export function createWorkspace(root, repository = disconnectedRepository) {
       }, 200);
     };
     d.attachForm(form);
+    d.baseline?.();
     return d;
   }
 
