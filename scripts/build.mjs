@@ -15,7 +15,9 @@ const result=await build({entryPoints:{app:'app.js'},outdir:'dist/assets',bundle
 await build({entryPoints:['auth-base.css','workspace-styles.css'],outdir:'dist',bundle:true,minify:true});
 const entry=Object.entries(result.metafile.outputs).find(([,value])=>value.entryPoint==='app.js')?.[0];
 if(!entry)throw new Error('Missing public app entry');
-let html=await readFile('index.html','utf8'); html=html.replace('src="/app.js"',`src="/${entry.replace(/^dist\//,'')}"`);
+let html=await readFile('index.html','utf8');
+html=html.replace(/src=["']\/app\.js(?:\?[^"']*)?["']/, `src="/${entry.replace(/^dist\//,'')}"`);
+if (!/\/assets\/app-[A-Za-z0-9_-]+\.js/.test(html)) throw new Error('Production HTML did not receive the bundled app entry.');
 await writeFile('dist/index.html',html);
 await writeFile('dist/build-info.json',JSON.stringify({commit:process.env.VERCEL_GIT_COMMIT_SHA||process.env.GITHUB_SHA||'local',builtAt:new Date().toISOString(),entry}));
 await writeFile('build-metafile.json',JSON.stringify(result.metafile,null,2));
