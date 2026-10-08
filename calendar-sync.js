@@ -33,7 +33,19 @@ export function installMayerJustinCalendar() {
       includeToday: includeToday ? '1' : '',
       includeReschedule: includeReschedule ? '1' : ''
     });
-    return Array.isArray(payload.events) ? payload.events : [];
+    const events = Array.isArray(payload.events) ? payload.events : [];
+    const eventIds = events.map(event => event.id).filter(Boolean);
+    if (!eventIds.length) return events;
+    const { data: links, error } = await supabase
+      .from('calendar_event_client_links')
+      .select('event_id,client_id')
+      .in('event_id', eventIds);
+    if (error) throw error;
+    const byEvent = new Map((links || []).map(link => [link.event_id, link.client_id]));
+    return events.map(event => ({
+      ...event,
+      client_id: event.client_id || byEvent.get(event.id) || null
+    }));
   };
 
   mhRepository.saveEvent = async function(value) {
@@ -52,12 +64,35 @@ export function installMayerJustinCalendar() {
     const result = eventId
       ? await calendarRequest('PATCH', { id: eventId }, payload)
       : await calendarRequest('POST', {}, payload);
-    return result.event;
+    const saved = result.event;
+    if (!saved?.id) return saved;
+
+    if (payload.client_id) {
+      const { error } = await supabase
+        .from('calendar_event_client_links')
+        .upsert({
+          event_id: saved.id,
+          client_id: payload.client_id,
+          updated_by: this.user?.id || null,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'event_id' });
+      if (error) throw error;
+    } else {
+      const { error } = await supabase
+        .from('calendar_event_client_links')
+        .delete()
+        .eq('event_id', saved.id);
+      if (error) throw error;
+    }
+
+    return { ...saved, client_id: payload.client_id || saved.client_id || null };
   };
 
   mhRepository.deleteEvent = async function(eventId) {
     if (!eventId) throw new Error('Missing calendar event ID.');
-    return calendarRequest('DELETE', { id: eventId });
+    const result = await calendarRequest('DELETE', { id: eventId });
+    await supabase.from('calendar_event_client_links').delete().eq('event_id', eventId);
+    return result;
   };
 
   mhRepository.completeEvent = async function(eventId) {
