@@ -19,13 +19,26 @@ const ROWS = Object.freeze([
 export function createMAPlansFeature({ dialogs }) {
   let host = null;
   const selected = new Set();
+  let carrierFilter = 'All';
+  let medicaidFilter = 'ALL';
 
   function selectedPlans() {
     return MA_PLANS_2027.filter(plan => selected.has(plan.plan_number));
   }
 
+  function matchesMedicaid(plan) {
+    if (medicaidFilter === 'ALL') return true;
+    if (medicaidFilter === 'NONE') return !plan.is_dsnp;
+    return plan.medicaid_levels.includes(medicaidFilter) || plan.medicaid_levels.includes('DUAL_VERIFY');
+  }
+
+  function visiblePlansForCarrier(carrier) {
+    return plansByCarrier(carrier).filter(matchesMedicaid);
+  }
+
   function carrierMarkup(carrier) {
-    const plans = plansByCarrier(carrier);
+    const plans = visiblePlansForCarrier(carrier);
+    if (!plans.length) return '';
     return `
       <section class="ma-carrier-section" data-ma-carrier="${esc(carrier)}">
         <div class="ma-carrier-head">
@@ -41,6 +54,7 @@ export function createMAPlansFeature({ dialogs }) {
                 <span class="ma-plan-copy">
                   <strong>${esc(plan.plan_name)}</strong>
                   <small>${esc(plan.plan_number)}</small>
+                  <em>${esc(plan.medicaid_label)}</em>
                 </span>
               </label>`;
           }).join('')}
@@ -63,12 +77,37 @@ export function createMAPlansFeature({ dialogs }) {
             <button type="button" class="btn primary" data-ma-compare ${selected.size ? '' : 'disabled'}>Compare Plans</button>
           </div>
         </header>
+        <section class="ma-filter-bar" aria-label="MA plan filters">
+          <label>
+            <span>Carrier</span>
+            <select data-ma-carrier-filter>
+              <option value="All"${carrierFilter === 'All' ? ' selected' : ''}>All carriers</option>
+              ${MA_CARRIERS.map(carrier => `<option value="${esc(carrier)}"${carrierFilter === carrier ? ' selected' : ''}>${esc(carrier === 'UnitedHealthcare' ? 'UHC / UnitedHealthcare' : carrier)}</option>`).join('')}
+            </select>
+          </label>
+          <label>
+            <span>Medicaid level</span>
+            <select data-ma-medicaid-filter>
+              ${[
+                ['ALL','All Medicaid levels'],
+                ['NONE','No Medicaid / regular MA'],
+                ['QMB','QMB'],
+                ['QMB+','QMB+'],
+                ['SLMB','SLMB'],
+                ['SLMB+','SLMB+'],
+                ['QI','QI'],
+                ['QDWI','QDWI'],
+                ['FBDE','FBDE / Full Medicaid']
+              ].map(([value,label]) => `<option value="${value}"${medicaidFilter === value ? ' selected' : ''}>${label}</option>`).join('')}
+            </select>
+          </label>
+        </section>
         <div class="ma-plan-note">
           <strong>2027 Mississippi reference.</strong>
-          Benefits marked “See SOB/EOC” have not been entered from the official carrier document yet. Service-area and eligibility rules can change the benefit shown.
+          Exact Medicaid levels are shown where verified. “Dual eligible — verify exact Medicaid level” means the plan is a D-SNP but its exact 2027 Mississippi eligibility category still needs confirmation from the carrier document.
         </div>
         <div class="ma-carrier-grid">
-          ${MA_CARRIERS.map(carrierMarkup).join('')}
+          ${(carrierFilter === 'All' ? MA_CARRIERS : [carrierFilter]).map(carrierMarkup).join('') || '<div class="ma-no-results">No plans match that carrier and Medicaid level.</div>'}
         </div>
       </section>`;
   }
@@ -130,6 +169,14 @@ export function createMAPlansFeature({ dialogs }) {
         }
         render();
       });
+    });
+    host.querySelector('[data-ma-carrier-filter]')?.addEventListener('change', event => {
+      carrierFilter = event.target.value;
+      render();
+    });
+    host.querySelector('[data-ma-medicaid-filter]')?.addEventListener('change', event => {
+      medicaidFilter = event.target.value;
+      render();
     });
     host.querySelector('[data-ma-compare]')?.addEventListener('click', openComparison);
     host.querySelector('[data-ma-clear]')?.addEventListener('click', () => {
