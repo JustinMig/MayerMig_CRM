@@ -65,3 +65,10 @@
 .ma-no-results{grid-column:1/-1;padding:20px;border:1px dashed rgba(0,0,0,.25);border-radius:12px;background:#fff;color:#000;font-weight:700}
 .ma-compare-table th,.ma-compare-table td,.ma-compare-footnote{color:#000}
 @media(max-width:620px){.ma-filter-bar{grid-template-columns:1fr}}
+
+.ma-filter-bar-expanded{grid-template-columns:repeat(3,minmax(180px,1fr));max-width:none}
+.ma-filter-bar input{width:100%;min-height:42px;border:1px solid rgba(0,0,0,.22);border-radius:9px;background:#fff;padding:8px 10px;font-weight:700;color:#000}
+.ma-zip-filter small{font-size:.72rem;line-height:1.3;color:#222;font-weight:600}
+.ma-filter-bar select:focus,.ma-filter-bar input:focus{outline:2px solid rgba(24,63,84,.28);outline-offset:1px}
+@media(max-width:980px){.ma-filter-bar-expanded{grid-template-columns:repeat(2,minmax(180px,1fr))}}
+@media(max-width:620px){.ma-filter-bar-expanded{grid-template-columns:1fr}}
