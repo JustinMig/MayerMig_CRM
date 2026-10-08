@@ -17,8 +17,8 @@
 .ma-plan-row.selected{background:rgba(228,241,238,.7)}
 .ma-plan-row input{margin-top:3px;flex:0 0 auto}
 .ma-plan-copy{display:grid;gap:2px;min-width:0}
-.ma-plan-copy strong{font-size:.9rem;line-height:1.28}
-.ma-plan-copy small{font-size:.77rem;opacity:.67;font-weight:700}
+.ma-plan-copy strong{font-size:.9rem;line-height:1.28;color:#102c3c;font-weight:800}
+.ma-plan-copy small{font-size:.77rem;color:#3f5561;opacity:1;font-weight:800}
 .ma-plan-compare-dialog{width:min(1180px,calc(100vw - 26px));max-width:1180px}
 .ma-compare-wrap{display:grid;gap:12px}
 .ma-compare-scroll{overflow:auto;border:1px solid rgba(20,49,67,.12);border-radius:12px}
@@ -35,3 +35,8 @@
 .ma-compare-footnote{margin:0;font-size:.78rem;line-height:1.45;opacity:.72}
 @media(max-width:900px){.ma-carrier-grid{grid-template-columns:1fr}.ma-plans-intro{align-items:flex-start;flex-direction:column}.ma-plan-actions{justify-content:flex-start}}
 @media(max-width:560px){.ma-plans-intro{padding:14px}.ma-plan-actions{width:100%}.ma-plan-actions .btn{flex:1 1 auto}.ma-plan-row{padding:11px 12px}}
+
+.ma-plan-row{color:#102c3c}
+.ma-plan-row input{accent-color:#183f54}
+.ma-plan-row.selected .ma-plan-copy strong{color:#0b2736}
+.ma-plan-row.selected .ma-plan-copy small{color:#304955}
