@@ -40,3 +40,28 @@
 .ma-plan-row input{accent-color:#183f54}
 .ma-plan-row.selected .ma-plan-copy strong{color:#0b2736}
 .ma-plan-row.selected .ma-plan-copy small{color:#304955}
+
+.ma-plans-page,
+.ma-plans-page h1,
+.ma-plans-page h2,
+.ma-plans-page h3,
+.ma-plans-page p,
+.ma-plans-page span,
+.ma-plans-page strong,
+.ma-plans-page small,
+.ma-plans-page em,
+.ma-plans-page label,
+.ma-plans-page select,
+.ma-plans-page button{color:#000}
+.ma-plans-intro p{color:#000}
+.ma-plan-copy strong{color:#000}
+.ma-plan-copy small{color:#111}
+.ma-plan-copy em{font-size:.72rem;font-style:normal;font-weight:700;color:#222;line-height:1.25}
+.ma-carrier-head span{opacity:1;color:#111}
+.ma-filter-bar{display:grid;grid-template-columns:repeat(2,minmax(0,260px));gap:12px;padding:14px 16px;border:1px solid rgba(0,0,0,.12);border-radius:12px;background:#fff}
+.ma-filter-bar label{display:grid;gap:6px;font-weight:800}
+.ma-filter-bar label>span{font-size:.82rem}
+.ma-filter-bar select{width:100%;min-height:42px;border:1px solid rgba(0,0,0,.22);border-radius:9px;background:#fff;padding:8px 10px;font-weight:700}
+.ma-no-results{grid-column:1/-1;padding:20px;border:1px dashed rgba(0,0,0,.25);border-radius:12px;background:#fff;color:#000;font-weight:700}
+.ma-compare-table th,.ma-compare-table td,.ma-compare-footnote{color:#000}
+@media(max-width:620px){.ma-filter-bar{grid-template-columns:1fr}}
