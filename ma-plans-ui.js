@@ -1,4 +1,6 @@
 import { MA_CARRIERS, MA_PLAN_YEAR, MA_PLANS_2027, plansByCarrier } from './ma-plans-data.js?v=ma-plans-3';
+import { countyForMississippiZip } from './ma-ms-zip-county.js?v=ma-plans-4';
+import { supabase } from './supabase-repository.js';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({
   '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
@@ -19,11 +21,21 @@ const ROWS = Object.freeze([
 export function createMAPlansFeature({ dialogs }) {
   let host = null;
   const selected = new Set();
-  let carrierFilter = 'All';
+  let carrierFilters = ['', '', '', ''];
   let medicaidFilter = 'ALL';
+  let zipCode = '';
+  let zipCounty = null;
+  let availablePlanIds = null;
+  let zipLoading = false;
+  let zipError = '';
+  let zipToken = 0;
 
   function selectedPlans() {
     return MA_PLANS_2027.filter(plan => selected.has(plan.plan_number));
+  }
+
+  function chosenCarriers() {
+    return [...new Set(carrierFilters.filter(Boolean))];
   }
 
   function matchesMedicaid(plan) {
@@ -32,8 +44,58 @@ export function createMAPlansFeature({ dialogs }) {
     return plan.medicaid_levels.includes(medicaidFilter) || plan.medicaid_levels.includes('DUAL_VERIFY');
   }
 
+  function matchesZip(plan) {
+    if (!zipCode) return true;
+    if (zipCode.length !== 5 || zipLoading || zipError || !(availablePlanIds instanceof Set)) return false;
+    return availablePlanIds.has(plan.plan_number);
+  }
+
   function visiblePlansForCarrier(carrier) {
-    return plansByCarrier(carrier).filter(matchesMedicaid);
+    return plansByCarrier(carrier).filter(plan => matchesMedicaid(plan) && matchesZip(plan));
+  }
+
+  async function authHeaders() {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) throw new Error('Your Mayer MIG CRM session expired. Sign in again.');
+    return { Authorization: `Bearer ${session.access_token}` };
+  }
+
+  async function loadZipAvailability(value) {
+    const normalized = String(value || '').replace(/\D/g, '').slice(0, 5);
+    zipCode = normalized;
+    const token = ++zipToken;
+    zipCounty = null;
+    availablePlanIds = null;
+    zipError = '';
+    if (!normalized) { zipLoading = false; render(); return; }
+    if (normalized.length !== 5) { zipLoading = false; render(); return; }
+
+    const match = countyForMississippiZip(normalized);
+    if (!match) {
+      zipLoading = false;
+      zipError = 'That ZIP was not found as a Mississippi ZIP code.';
+      render();
+      return;
+    }
+
+    zipCounty = match;
+    zipLoading = true;
+    render();
+    try {
+      const headers = await authHeaders();
+      const response = await fetch(`/api/ma-plan-availability?county=${encodeURIComponent(match.county)}`, { headers, cache: 'no-store' });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || 'Unable to check 2027 plan availability.');
+      if (token !== zipToken) return;
+      availablePlanIds = new Set(Array.isArray(payload.plans) ? payload.plans : []);
+      zipLoading = false;
+      render();
+    } catch (error) {
+      if (token !== zipToken) return;
+      zipLoading = false;
+      zipError = error?.message || 'Unable to check this ZIP right now.';
+      render();
+    }
   }
 
   function carrierMarkup(carrier) {
@@ -77,14 +139,20 @@ export function createMAPlansFeature({ dialogs }) {
             <button type="button" class="btn primary" data-ma-compare ${selected.size ? '' : 'disabled'}>Compare Plans</button>
           </div>
         </header>
-        <section class="ma-filter-bar" aria-label="MA plan filters">
-          <label>
-            <span>Carrier</span>
-            <select data-ma-carrier-filter>
-              <option value="All"${carrierFilter === 'All' ? ' selected' : ''}>All carriers</option>
-              ${MA_CARRIERS.map(carrier => `<option value="${esc(carrier)}"${carrierFilter === carrier ? ' selected' : ''}>${esc(carrier === 'UnitedHealthcare' ? 'UHC / UnitedHealthcare' : carrier)}</option>`).join('')}
-            </select>
+        <section class="ma-filter-bar ma-filter-bar-expanded" aria-label="MA plan filters">
+          <label class="ma-zip-filter">
+            <span>ZIP code</span>
+            <input data-ma-zip value="${esc(zipCode)}" inputmode="numeric" maxlength="5" placeholder="Example: 38834" autocomplete="postal-code">
+            <small data-ma-zip-status>${zipLoading ? 'Checking 2027 CMS plan availability…' : zipError ? esc(zipError) : zipCounty ? `${esc(zipCounty.county)} County, Mississippi` : 'Enter a 5-digit Mississippi ZIP'}</small>
           </label>
+          ${carrierFilters.map((value, index) => `
+            <label>
+              <span>Carrier ${index + 1}</span>
+              <select data-ma-carrier-slot="${index}">
+                <option value="">Select carrier</option>
+                ${MA_CARRIERS.map(carrier => `<option value="${esc(carrier)}"${value === carrier ? ' selected' : ''}>${esc(carrier === 'UnitedHealthcare' ? 'UHC / UnitedHealthcare' : carrier)}</option>`).join('')}
+              </select>
+            </label>`).join('')}
           <label>
             <span>Medicaid level</span>
             <select data-ma-medicaid-filter>
@@ -107,7 +175,15 @@ export function createMAPlansFeature({ dialogs }) {
           Exact Medicaid levels are shown where verified. “Dual eligible — verify exact Medicaid level” means the plan is a D-SNP but its exact 2027 Mississippi eligibility category still needs confirmation from the carrier document.
         </div>
         <div class="ma-carrier-grid">
-          ${(carrierFilter === 'All' ? MA_CARRIERS : [carrierFilter]).map(carrierMarkup).join('') || '<div class="ma-no-results">No plans match that carrier and Medicaid level.</div>'}
+          ${chosenCarriers().length
+  ? (zipCode && zipCode.length !== 5
+      ? '<div class="ma-no-results">Enter the complete 5-digit ZIP code to filter plan availability.</div>'
+      : zipLoading
+        ? '<div class="ma-no-results">Checking CMS 2027 plan availability for this ZIP…</div>'
+        : zipError
+          ? `<div class="ma-no-results">${esc(zipError)}</div>`
+          : chosenCarriers().map(carrierMarkup).join('') || '<div class="ma-no-results">No matching 2027 plans were found for those selections.</div>')
+  : '<div class="ma-no-results">Select at least one carrier above to show plans.</div>'}
         </div>
       </section>`;
   }
@@ -170,10 +246,23 @@ export function createMAPlansFeature({ dialogs }) {
         render();
       });
     });
-    host.querySelector('[data-ma-carrier-filter]')?.addEventListener('change', event => {
-      carrierFilter = event.target.value;
-      render();
+    host.querySelectorAll('[data-ma-carrier-slot]').forEach(select => {
+      select.addEventListener('change', event => {
+        const index = Number(event.target.dataset.maCarrierSlot);
+        carrierFilters[index] = event.target.value;
+        render();
+      });
     });
+    const zipInput = host.querySelector('[data-ma-zip]');
+    if (zipInput) {
+      let timer = null;
+      zipInput.addEventListener('input', event => {
+        const value = String(event.target.value || '').replace(/\D/g, '').slice(0,5);
+        event.target.value = value;
+        window.clearTimeout(timer);
+        timer = window.setTimeout(() => void loadZipAvailability(value), value.length === 5 ? 120 : 220);
+      });
+    }
     host.querySelector('[data-ma-medicaid-filter]')?.addEventListener('change', event => {
       medicaidFilter = event.target.value;
       render();
