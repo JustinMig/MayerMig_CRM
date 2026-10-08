@@ -63,11 +63,24 @@ export async function startWorkspace() {
   installCarrierVault(root);
   applyCurrentUserToClientSearch();
 
-  void import('./communications-ui.js?v=communications-perf-3')
-    .then(() => import('./ringcentral-readonly.js?v=readonly-calls-3'))
-    .then(() => import('./ringcentral-ui-adjustments.js?v=footer-call-data-2'))
-    .then(() => import('./communications-layout-fix.js?v=communications-layout-2'))
-    .then(() => import('./communications-delete.js?v=communications-delete-2'))
-    .then(() => import('./communications-open-client.js?v=communications-open-client-2'))
-    .catch(error => console.error('Communications UI failed to load.', error));
+  let communicationsPromise = null;
+  const loadCommunicationsFeatures = () => {
+    if (communicationsPromise) return communicationsPromise;
+    communicationsPromise = import('./communications-ui.js?v=communications-perf-3')
+      .then(() => import('./ringcentral-readonly.js?v=readonly-calls-3'))
+      .then(() => import('./ringcentral-ui-adjustments.js?v=footer-call-data-2'))
+      .then(() => import('./communications-layout-fix.js?v=communications-layout-2'))
+      .then(() => import('./communications-delete.js?v=communications-delete-2'))
+      .then(() => import('./communications-open-client.js?v=communications-open-client-2'))
+      .catch(error => {
+        communicationsPromise = null;
+        console.error('Communications UI failed to load.', error);
+      });
+    return communicationsPromise;
+  };
+  const maybeLoadCommunications = () => {
+    if (location.hash.startsWith('#/communications')) void loadCommunicationsFeatures();
+  };
+  window.addEventListener('hashchange', maybeLoadCommunications);
+  maybeLoadCommunications();
 }
