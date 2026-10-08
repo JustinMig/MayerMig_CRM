@@ -5,10 +5,23 @@ const RX_OOP_2027 = '$2,400 / year Part D maximum';
 const VERIFY = 'See SOB/EOC';
 const varies = value => value || 'Varies by service area — see SOB/EOC';
 
-const plan = (carrier, planNumber, planName, values = {}) => Object.freeze({
+const plan = (carrier, planNumber, planName, values = {}) => {
+  const isDsnp = /D-SNP|Dual|SNP-DE/i.test(planName);
+  const defaultLevels = /QMB Only/i.test(planName)
+    ? ['QMB']
+    : /Full Dual|DUAL CHOICE FULL/i.test(planName)
+      ? ['QMB+','SLMB+','FBDE']
+      : isDsnp
+        ? ['DUAL_VERIFY']
+        : ['NONE'];
+  const medicaidLevels = Array.isArray(values.medicaid_levels) && values.medicaid_levels.length ? values.medicaid_levels : defaultLevels;
+  return Object.freeze({
   carrier,
   plan_number: planNumber,
   plan_name: planName,
+  is_dsnp: isDsnp,
+  medicaid_levels: Object.freeze([...medicaidLevels]),
+  medicaid_label: values.medicaid_label || (medicaidLevels.includes('DUAL_VERIFY') ? 'Dual eligible — verify exact Medicaid level' : medicaidLevels.includes('NONE') ? 'No Medicaid required' : medicaidLevels.join(', ')),
   premium: values.premium || VERIFY,
   medical_moop: values.medical_moop || VERIFY,
   rx_oop: values.part_d === false ? 'No Part D prescription drug coverage' : (values.rx_oop || RX_OOP_2027),
@@ -21,7 +34,8 @@ const plan = (carrier, planNumber, planName, values = {}) => Object.freeze({
   source_note: values.source_note || '2027 Mississippi plan inventory; verify final benefits in carrier SOB/EOC.',
   sob_url: values.sob_url || '',
   eoc_url: values.eoc_url || ''
-});
+  });
+};
 
 export const MA_PLANS_2027 = Object.freeze([
   // HUMANA — 2027 Mississippi inventory observed across current Mississippi county landscapes.
@@ -71,16 +85,16 @@ export const MA_PLANS_2027 = Object.freeze([
   plan('UnitedHealthcare','H1889-045','UHC Dual Complete MS-Q1 (PPO D-SNP)',{premium:'$0 / month',medical_moop:'$9,850 in-network'}),
 
   // DEVOTED — official 2027 Mississippi plan-document inventory.
-  plan('Devoted','H7355-001','DEVOTED CHOICE 001 MS (PPO)',{premium:'$0 / month',medical_moop:'$5,400 in-network',dental:'$3,500 / year',vision:'$350 / year',otc_food_utilities:'$100 OTC / quarter; food or utility benefits may vary by eligibility/service area'}),
+  plan('Devoted','H7355-001','DEVOTED CHOICE 001 MS (PPO)',{premium:'$0 / month',medical_moop:'$5,400 in-network',dental:'$3,500 / year',vision:'$350 / year',hearing:'Routine hearing exam $0 in-network; hearing-aid details in SOB/EOC',otc_food_utilities:'$100 OTC / quarter; Food & Home $60 / month in published MS service areas',medicaid_levels:['NONE']}),
   plan('Devoted','H7355-002','DEVOTED CHOICE GIVEBACK 002 MS (PPO)',{premium:'$0 / month',medical_moop:'$9,850 in-network'}),
-  plan('Devoted','H7355-003','DEVOTED DUAL CHOICE PLUS 003 MS (PPO D-SNP)',{premium:'$0 / month',medical_moop:'$9,850 in-network'}),
-  plan('Devoted','H7355-004','DEVOTED DUAL CHOICE 004 MS (PPO D-SNP)',{premium:'$0 / month',medical_moop:'$5,900 in-network'}),
+  plan('Devoted','H7355-003','DEVOTED DUAL CHOICE PLUS 003 MS (PPO D-SNP)',{premium:'$0–$23.80 / month depending on Extra Help',medical_moop:'$9,850 in-network',dental:'$2,000 / year',vision:'$375 / year',hearing:'Routine hearing exam $0 in-network; hearing-aid details in SOB/EOC',otc_food_utilities:'$50 OTC / quarter; Food & Home $265 / month',medicaid_levels:['QMB','QMB+','SLMB+','FBDE'],medicaid_label:'QMB-only, QMB+, SLMB+, FBDE'}),
+  plan('Devoted','H7355-004','DEVOTED DUAL CHOICE 004 MS (PPO D-SNP)',{premium:'$0–$23.80 / month depending on Extra Help',medical_moop:'$5,900 in-network',dental:'$2,000 / year',vision:'$375 / year',hearing:'Routine hearing exam $0 in-network; hearing-aid details in SOB/EOC',otc_food_utilities:'$50 OTC / quarter; Food & Home $115 / month',medicaid_levels:['SLMB','QI','QDWI'],medicaid_label:'SLMB, QI, QDWI'}),
   plan('Devoted','H7355-006','DEVOTED C-SNP CHOICE 006 MS (PPO C-SNP)',{premium:'$0 / month',medical_moop:'$5,700 in-network',dental:'$3,500 / year',vision:'$350 / year',otc_food_utilities:'$120 OTC / quarter; Food & Home amount varies by service area'}),
   plan('Devoted','H7355-007','DEVOTED C-SNP CHOICE ENHANCED 007 MS (PPO C-SNP)',{premium:'$0 / month',medical_moop:'$5,900 in-network'}),
-  plan('Devoted','H7355-009','DEVOTED DUAL CHOICE FULL 009 MS (PPO D-SNP)',{premium:'$0 / month',medical_moop:'$9,850 in-network'}),
-  plan('Devoted','H7355-010','DEVOTED C-SNP CHOICE PLUS 010 MS (PPO C-SNP)',{premium:'$0 / month',dental:'$4,000 / year',vision:'$400 / year',otc_food_utilities:'$50 OTC / quarter; Food & Home amount varies by service area'}),
+  plan('Devoted','H7355-009','DEVOTED DUAL CHOICE FULL 009 MS (PPO D-SNP)',{premium:'$0–$23.80 / month depending on Extra Help',medical_moop:'$9,850 in-network',dental:'$4,000 / year',vision:'$400 / year',hearing:'Routine hearing exam $0 in-network; hearing-aid details in SOB/EOC',otc_food_utilities:'$50 OTC / quarter; Food & Home about $301–$316 / month depending on MS service area',medicaid_levels:['QMB+','SLMB+','FBDE'],medicaid_label:'QMB+, SLMB+, FBDE'}),
+  plan('Devoted','H7355-010','DEVOTED C-SNP CHOICE PLUS 010 MS (PPO C-SNP)',{premium:'$0–$23.80 / month depending on Extra Help',dental:'$4,000 / year',vision:'$400 / year',hearing:'Routine hearing exam $0 in-network; hearing-aid details in SOB/EOC',otc_food_utilities:'$50 OTC / quarter; Food & Home $341 / month in published MS service areas',medicaid_levels:['NONE']}),
   plan('Devoted','H7355-011','DEVOTED C-SNP CHOICE GIVEBACK EXTRAS 011 MS (PPO C-SNP)',{premium:'$0 / month',medical_moop:'$7,500 in-network'}),
-  plan('Devoted','H7355-012','DEVOTED CHOICE GIVEBACK EXTRAS 012 MS (PPO)',{premium:'$0 / month',medical_moop:'$7,500 in-network',dental:'$2,500 / year',vision:'$400 / year',otc_food_utilities:'$62 OTC / quarter'})
+  plan('Devoted','H7355-012','DEVOTED CHOICE GIVEBACK EXTRAS 012 MS (PPO)',{premium:'$0 / month',medical_moop:'$7,500 in-network',dental:'$2,500 / year',vision:'$400 / year',hearing:'Routine hearing exam $0 in-network; hearing-aid details in SOB/EOC',otc_food_utilities:'$62 OTC / quarter',medicaid_levels:['NONE']})
 ]);
 
 export function plansByCarrier(carrier) {
