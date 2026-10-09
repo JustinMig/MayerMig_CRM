@@ -98,7 +98,7 @@ export const mhRepository = {
       ...client, address: client.address1 || '', zip: client.zip_code || '', spouse: client.spouse || '', notes: client.notes || '',
       license_number: client.drivers_license_number || '', license_expiration: client.drivers_license_expiration || '', license_state: client.drivers_license_state || '',
       product_medicare: p.includes('medicare'), product_life: p.includes('life'), product_retirement: p.includes('retirement'),
-      part_a_date: medicare?.part_a_date || '', part_b_date: medicare?.part_b_date || '', medicaid_level: medicare?.medicaid_level || '', medicaid_number: medicare?.medicaid_number || '', medicare_notes: medicare?.notes || '', _medicare_id: medicare?.client_id || null,
+      part_a_date: medicare?.part_a_date || '', part_b_date: medicare?.part_b_date || '', medicaid_level: medicare?.medicaid_level || '', medicaid_number: medicare?.medicaid_number || '', sunfire_code: medicare?.sunfire_code || '', medicare_notes: medicare?.notes || '', _medicare_id: medicare?.client_id || null,
       health_carrier: health?.carrier || '', health_plan_id: health?.plan_id || '', health_member_id: health?.member_id || '', health_effective_date: health?.effective_date || '', health_premium: health?.premium ?? '', health_plan_type: health?.plan_type || '', _health_id: health?.id || null,
       life_carrier: life?.carrier || '', life_product: life?.product || life?.policy_type || '', life_policy_number: life?.policy_number || '', life_face_amount: life?.face_amount ?? '', life_premium: life?.premium ?? '', life_frequency: life?.premium_mode || '', life_effective_date: life?.effective_date || '', life_notes: life?.notes || '', _life_id: life?.id || null,
       retirement_carrier: retirement?.carrier || '', retirement_product: retirement?.product || '', retirement_contract: retirement?.contract_number || '', retirement_effective_date: retirement?.effective_date || '', retirement_contribution: retirement?.contribution_amount ?? '', retirement_value: retirement?.account_value ?? '', retirement_notes: retirement?.notes || '', _retirement_id: retirement?.id || null
@@ -135,7 +135,7 @@ export const mhRepository = {
 
     if ('license_number' in record) await saveEncryptedLicense(client.id, record.license_number);
 
-    const { error: medErr } = await supabase.from('medicare_details').upsert({ client_id: client.id, part_a_date: clean(record.part_a_date), part_b_date: clean(record.part_b_date), medicaid_level: clean(record.medicaid_level), notes: clean(record.medicare_notes) }, { onConflict: 'client_id' });
+    const { error: medErr } = await supabase.from('medicare_details').upsert({ client_id: client.id, part_a_date: clean(record.part_a_date), part_b_date: clean(record.part_b_date), medicaid_level: clean(record.medicaid_level), sunfire_code: clean(record.sunfire_code), notes: clean(record.medicare_notes) }, { onConflict: 'client_id' });
     if (medErr) throw medErr;
 
     let health = null;
