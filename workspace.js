@@ -175,10 +175,16 @@ export function createWorkspace(root, repository = disconnectedRepository) {
       if (!saved?.id) throw new Error('The save was not confirmed by the database. Your changes remain open.');
       record = saved;
       patchClient(saved);
+      const savedName = [saved.first_name, saved.last_name].filter(Boolean).join(' ').trim();
+      const titleNode = d.node.querySelector('h2');
+      if (titleNode && savedName) titleNode.textContent = savedName;
     } });
     const mount = loaded => {
       if (!d.node.isConnected) return;
       record = loaded;
+      const clientName = [loaded.first_name, loaded.last_name].filter(Boolean).join(' ').trim();
+      const titleNode = d.node.querySelector('h2');
+      if (titleNode) titleNode.textContent = clientName || (id ? 'Client' : 'New Client');
       d.node.querySelector('.modal-body').innerHTML = `${info}${clientForm(connected, agents)}`;
       const form = d.node.querySelector('form');
       hydrate(form, record);
