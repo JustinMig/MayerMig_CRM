@@ -470,9 +470,14 @@ export function createWorkspace(root, repository = disconnectedRepository) {
           if (!d.node.isConnected || request !== token) return;
           host.innerHTML = result.rows.length ? result.rows.map(c => `<button type="button" data-person-id="${esc(c.id)}">${esc([c.first_name, c.last_name].filter(Boolean).join(' '))}<small>${esc(c.phone || '')}</small></button>`).join('') : '<p>No matches</p>';
           host.querySelectorAll('[data-person-id]').forEach(b => b.onclick = () => {
+            const client = result.rows.find(row => String(row.id) === String(b.dataset.personId));
             form.elements.client_id.value = b.dataset.personId;
             form.querySelector('[data-selected-person]').textContent = `Selected: ${b.textContent}`;
-            host.innerHTML = ''; form.dispatchEvent(new Event('change'));
+            const firstName = String(client?.first_name || '').trim();
+            if (firstName) form.elements.title.value = firstName;
+            host.innerHTML = '';
+            form.dispatchEvent(new Event('input', { bubbles: true }));
+            form.dispatchEvent(new Event('change', { bubbles: true }));
           });
         } catch {
           if (d.node.isConnected && request === token) host.textContent = connected ? 'Client lookup failed. Please retry.' : 'Client lookup is not connected yet.';
