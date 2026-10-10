@@ -1,4 +1,4 @@
-import { MA_CARRIERS, MA_PLAN_YEAR, MA_PLANS_2027, plansByCarrier } from './ma-plans-data.js?v=ma-plans-3';
+import { MA_CARRIERS, MA_PLAN_YEAR, MA_PLANS_2027, plansByCarrier } from './ma-plans-data.js?v=ma-plans-5';
 import { countyForMississippiZip } from './ma-ms-zip-county.js?v=ma-plans-4';
 import { supabase } from './supabase-repository.js';
 
@@ -8,14 +8,24 @@ const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({
 
 const ROWS = Object.freeze([
   ['Plan price', 'premium'],
+  ['Part B giveback', 'part_b_giveback'],
+  ['Medical deductible', 'medical_deductible'],
   ['Medical max out-of-pocket', 'medical_moop'],
-  ['Prescription max out-of-pocket', 'rx_oop'],
-  ['Dental allowance', 'dental'],
-  ['Vision allowance', 'vision'],
-  ['Hearing allowance', 'hearing'],
+  ['Primary care (PCP)', 'pcp'],
+  ['Specialist', 'specialist'],
   ['Inpatient hospital stay', 'inpatient'],
+  ['Ambulance', 'ambulance'],
+  ['Emergency room', 'emergency_room'],
+  ['Urgent care', 'urgent_care'],
+  ['Drug deductible', 'drug_deductible'],
+  ['Prescription max out-of-pocket', 'rx_oop'],
+  ['Dental', 'dental'],
+  ['Vision', 'vision'],
+  ['Hearing', 'hearing'],
   ['OTC / Food / Utilities', 'otc_food_utilities'],
-  ['Transportation', 'transportation']
+  ['Transportation', 'transportation'],
+  ['Fitness', 'fitness'],
+  ['Eligibility', 'eligibility']
 ]);
 
 export function createMAPlansFeature({ dialogs }) {
@@ -60,27 +70,26 @@ export function createMAPlansFeature({ dialogs }) {
     return { Authorization: `Bearer ${session.access_token}` };
   }
 
-  async function loadZipAvailability(value) {
+  async function loadZipAvailability(value, preserveFocus = false) {
     const normalized = String(value || '').replace(/\D/g, '').slice(0, 5);
     zipCode = normalized;
     const token = ++zipToken;
     zipCounty = null;
     availablePlanIds = null;
     zipError = '';
-    if (!normalized) { zipLoading = false; render(); return; }
-    if (normalized.length !== 5) { zipLoading = false; render(); return; }
+    if (!normalized) { zipLoading = false; return; }
+    if (normalized.length !== 5) { zipLoading = false; return; }
 
     const match = countyForMississippiZip(normalized);
     if (!match) {
       zipLoading = false;
       zipError = 'That ZIP was not found as a Mississippi ZIP code.';
-      render();
+      render(preserveFocus);
       return;
     }
 
     zipCounty = match;
     zipLoading = true;
-    render();
     try {
       const headers = await authHeaders();
       const response = await fetch(`/api/ma-plan-availability?county=${encodeURIComponent(match.county)}`, { headers, cache: 'no-store' });
@@ -89,12 +98,12 @@ export function createMAPlansFeature({ dialogs }) {
       if (token !== zipToken) return;
       availablePlanIds = new Set(Array.isArray(payload.plans) ? payload.plans : []);
       zipLoading = false;
-      render();
+      render(preserveFocus);
     } catch (error) {
       if (token !== zipToken) return;
       zipLoading = false;
       zipError = error?.message || 'Unable to check this ZIP right now.';
-      render();
+      render(preserveFocus);
     }
   }
 
@@ -171,8 +180,8 @@ export function createMAPlansFeature({ dialogs }) {
           </label>
         </section>
         <div class="ma-plan-note">
-          <strong>2027 Mississippi reference.</strong>
-          Exact Medicaid levels are shown where verified. “Dual eligible — verify exact Medicaid level” means the plan is a D-SNP but its exact 2027 Mississippi eligibility category still needs confirmation from the carrier document.
+          <strong>2027 Mississippi reference • 64 plans.</strong>
+          Benefits are loaded from the October 10, 2026 Mississippi plan reference. Exact Medicaid levels are shown where verified. “Dual eligible — verify exact Medicaid level” means the source did not confirm the exact Medicaid category list.
         </div>
         <div class="ma-carrier-grid">
           ${chosenCarriers().length
@@ -208,7 +217,7 @@ export function createMAPlansFeature({ dialogs }) {
               ${ROWS.map(([label, key]) => `
                 <tr>
                   <th>${esc(label)}</th>
-                  ${plans.map(plan => `<td>${esc(plan[key] || 'See SOB/EOC')}</td>`).join('')}
+                  ${plans.map(plan => `<td>${esc(plan[key] || 'Verify in official 2027 SOB/EOC')}</td>`).join('')}
                 </tr>`).join('')}
             </tbody>
           </table>
@@ -257,10 +266,24 @@ export function createMAPlansFeature({ dialogs }) {
     if (zipInput) {
       let timer = null;
       zipInput.addEventListener('input', event => {
-        const value = String(event.target.value || '').replace(/\D/g, '').slice(0,5);
+        const value = String(event.target.value || '').replace(/\D/g, '').slice(0, 5);
         event.target.value = value;
+        zipCode = value;
         window.clearTimeout(timer);
-        timer = window.setTimeout(() => void loadZipAvailability(value), value.length === 5 ? 120 : 220);
+
+        const status = host.querySelector('[data-ma-zip-status]');
+        if (value.length < 5) {
+          zipToken++;
+          zipLoading = false;
+          zipCounty = null;
+          availablePlanIds = null;
+          zipError = '';
+          if (status) status.textContent = value ? 'Enter the complete 5-digit Mississippi ZIP' : 'Enter a 5-digit Mississippi ZIP';
+          return;
+        }
+
+        if (status) status.textContent = 'Checking 2027 plan availability…';
+        timer = window.setTimeout(() => void loadZipAvailability(value, true), 120);
       });
     }
     host.querySelector('[data-ma-medicaid-filter]')?.addEventListener('change', event => {
@@ -274,10 +297,24 @@ export function createMAPlansFeature({ dialogs }) {
     });
   }
 
-  function render() {
+  function render(preserveZipFocus = false) {
     if (!host?.isConnected) return;
+    const currentZip = host.querySelector('[data-ma-zip]');
+    const activeZip = preserveZipFocus || document.activeElement === currentZip;
+    const zipSelection = activeZip && document.activeElement instanceof HTMLInputElement
+      ? [document.activeElement.selectionStart, document.activeElement.selectionEnd]
+      : null;
     host.innerHTML = pageMarkup();
     bind();
+    if (activeZip) {
+      const input = host.querySelector('[data-ma-zip]');
+      if (input) {
+        input.focus({ preventScroll: true });
+        const start = zipSelection?.[0] ?? input.value.length;
+        const end = zipSelection?.[1] ?? start;
+        try { input.setSelectionRange(start, end); } catch {}
+      }
+    }
   }
 
   return {
