@@ -653,8 +653,32 @@ export function createWorkspace(root, repository = disconnectedRepository) {
       root.querySelector('.menu-toggle')?.setAttribute('aria-expanded', 'false');
     }
   };
+  const refreshVisibleCalendar = () => {
+    if (state.destroyed || !root.querySelector('#calendar-host')) return;
+    drawCalendar();
+  };
+  const applyCalendarRefresh = event => {
+    if (state.destroyed || !root.querySelector('#calendar-host')) return;
+    const events = event?.detail?.events;
+    if (!Array.isArray(events)) return;
+    state.events = events;
+    drawCalendar();
+  };
+
   window.addEventListener('hashchange', changeRoute);
   window.addEventListener('keydown', escapeMenu);
+  window.addEventListener('mig:calendar-refresh-request', refreshVisibleCalendar);
+  window.addEventListener('mig:calendar-refreshed', applyCalendarRefresh);
   changeRoute();
-  return { destroy() { state.destroyed = true; campaignFeature?.destroy(); maPlansFeature?.destroy(); dialogs.destroy(); window.removeEventListener('hashchange', changeRoute); window.removeEventListener('keydown', escapeMenu); root.replaceChildren(); } };
+  return { destroy() {
+    state.destroyed = true;
+    campaignFeature?.destroy();
+    maPlansFeature?.destroy();
+    dialogs.destroy();
+    window.removeEventListener('hashchange', changeRoute);
+    window.removeEventListener('keydown', escapeMenu);
+    window.removeEventListener('mig:calendar-refresh-request', refreshVisibleCalendar);
+    window.removeEventListener('mig:calendar-refreshed', applyCalendarRefresh);
+    root.replaceChildren();
+  } };
 }
