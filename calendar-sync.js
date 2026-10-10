@@ -1,5 +1,17 @@
 import { mhRepository, supabase } from './supabase-repository.js';
 
+const CALENDAR_CACHE_TTL_MS = 60000;
+const calendarCache = new Map();
+const calendarInFlight = new Map();
+
+function calendarCacheKey({ start, end, includeToday = false, includeReschedule = false }) {
+  return [start || '', end || '', includeToday ? '1' : '0', includeReschedule ? '1' : '0'].join('|');
+}
+
+function invalidateCalendarCache() {
+  calendarCache.clear();
+}
+
 async function authHeaders() {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.access_token) throw new Error('Your M&H CRM session expired. Sign in again.');
@@ -26,26 +38,56 @@ export function installMayerJustinCalendar() {
   if (mhRepository.__mayerJustinCalendarInstalled) return;
   mhRepository.__mayerJustinCalendarInstalled = true;
 
+  async function fetchEvents(criteria, { background = false } = {}) {
+    const key = calendarCacheKey(criteria);
+    if (calendarInFlight.has(key)) return calendarInFlight.get(key);
+
+    const request = (async () => {
+      const payload = await calendarRequest('GET', {
+        start: criteria.start,
+        end: criteria.end,
+        includeToday: criteria.includeToday ? '1' : '',
+        includeReschedule: criteria.includeReschedule ? '1' : ''
+      });
+      const events = Array.isArray(payload.events) ? payload.events : [];
+      const eventIds = events.map(event => event.id).filter(Boolean);
+      let merged = events;
+      if (eventIds.length) {
+        const { data: links, error } = await supabase
+          .from('calendar_event_client_links')
+          .select('event_id,client_id')
+          .in('event_id', eventIds);
+        if (error) throw error;
+        const byEvent = new Map((links || []).map(link => [link.event_id, link.client_id]));
+        merged = events.map(event => ({
+          ...event,
+          client_id: event.client_id || byEvent.get(event.id) || null
+        }));
+      }
+      calendarCache.set(key, { events: merged, loadedAt: Date.now() });
+      if (background) {
+        window.dispatchEvent(new CustomEvent('mig:calendar-refreshed', {
+          detail: { ...criteria, events: merged }
+        }));
+      }
+      return merged;
+    })().finally(() => calendarInFlight.delete(key));
+
+    calendarInFlight.set(key, request);
+    return request;
+  }
+
   mhRepository.listEvents = async function({ start, end, includeToday = false, includeReschedule = false }) {
-    const payload = await calendarRequest('GET', {
-      start,
-      end,
-      includeToday: includeToday ? '1' : '',
-      includeReschedule: includeReschedule ? '1' : ''
-    });
-    const events = Array.isArray(payload.events) ? payload.events : [];
-    const eventIds = events.map(event => event.id).filter(Boolean);
-    if (!eventIds.length) return events;
-    const { data: links, error } = await supabase
-      .from('calendar_event_client_links')
-      .select('event_id,client_id')
-      .in('event_id', eventIds);
-    if (error) throw error;
-    const byEvent = new Map((links || []).map(link => [link.event_id, link.client_id]));
-    return events.map(event => ({
-      ...event,
-      client_id: event.client_id || byEvent.get(event.id) || null
-    }));
+    const criteria = { start, end, includeToday, includeReschedule };
+    const key = calendarCacheKey(criteria);
+    const cached = calendarCache.get(key);
+    if (cached) {
+      if (Date.now() - cached.loadedAt > CALENDAR_CACHE_TTL_MS) {
+        void fetchEvents(criteria, { background: true }).catch(() => {});
+      }
+      return cached.events;
+    }
+    return fetchEvents(criteria);
   };
 
   mhRepository.saveEvent = async function(value) {
@@ -64,6 +106,7 @@ export function installMayerJustinCalendar() {
     const result = eventId
       ? await calendarRequest('PATCH', { id: eventId }, payload)
       : await calendarRequest('POST', {}, payload);
+    invalidateCalendarCache();
     const saved = result.event;
     if (!saved?.id) return saved;
 
@@ -91,31 +134,38 @@ export function installMayerJustinCalendar() {
   mhRepository.deleteEvent = async function(eventId) {
     if (!eventId) throw new Error('Missing calendar event ID.');
     const result = await calendarRequest('DELETE', { id: eventId });
+    invalidateCalendarCache();
     await supabase.from('calendar_event_client_links').delete().eq('event_id', eventId);
     return result;
   };
 
   mhRepository.completeEvent = async function(eventId) {
     const result = await calendarRequest('PATCH', { id: eventId }, { action: 'complete' });
+    invalidateCalendarCache();
     return result.event;
   };
 
   mhRepository.rescheduleEvent = async function(eventId, note) {
     const result = await calendarRequest('PATCH', { id: eventId }, { action: 'reschedule', note });
+    invalidateCalendarCache();
     return result.event;
   };
 
+  let lastFocusRefresh = 0;
   window.MHCalendarSync = {
     source: 'Mayer CRM · Justin calendar',
-    refresh() {
-      if (location.hash.startsWith('#/dashboard') || location.hash.startsWith('#/appointments')) {
-        window.dispatchEvent(new HashChangeEvent('hashchange'));
-      }
+    refresh({ force = false } = {}) {
+      if (!(location.hash.startsWith('#/dashboard') || location.hash.startsWith('#/appointments'))) return;
+      if (force) invalidateCalendarCache();
+      window.dispatchEvent(new CustomEvent('mig:calendar-refresh-request'));
     }
   };
 
   window.addEventListener('focus', () => {
     if (document.querySelector('dialog[open]')) return;
+    const now = Date.now();
+    if (now - lastFocusRefresh < CALENDAR_CACHE_TTL_MS) return;
+    lastFocusRefresh = now;
     window.MHCalendarSync.refresh();
   });
 }
